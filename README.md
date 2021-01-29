@@ -2,7 +2,6 @@
 Tools for working with the Seven Bridges bioinformatics platform.
 
 ## ProjectDownloader
-Surprisingly, SB does not have a command line or GUI based file downloader that preserves the file folder structure in a project.  Until an official SB project downloader is created, use this one.
 <pre>
 u0028003$ java -jar ~/Code/SBApps/target/ProjectDownloader.jar -h
 
