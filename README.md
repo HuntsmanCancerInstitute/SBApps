@@ -10,7 +10,7 @@ Args: SBApps/ProjectDownloader: -h
 **************************************************************************************
 **                             Project Downloader: Feb 2021                         **
 **************************************************************************************
-This tool downloads files from Seven Bridges Projects while maintainingtheir folder
+This tool downloads files from Seven Bridges Projects while maintaining their folder
 structure via the fast, multi-threaded, aria2 download utility.
 
 Options:
