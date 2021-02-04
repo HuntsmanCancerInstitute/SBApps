@@ -98,6 +98,7 @@ public class ProjectDownloader {
 			//check links
 			JSONArray links = pj.getObject().getJSONArray("links");
 			//Util.p("LINKS:\n"+ links.toString(5));
+			if (links.length() == 0) break;
 			JSONObject linksDetails = (JSONObject) links.get(0);
 			String rel = linksDetails.getString("rel");
 			if (rel == null) {
@@ -128,6 +129,7 @@ public class ProjectDownloader {
 			}
 			Util.p("\t\t"+numProj+"\tProjects");
 		}
+		System.exit(0);
 	}
 
 
@@ -369,10 +371,10 @@ public class ProjectDownloader {
 	public static void printDocs(){
 		Util.p(
 				"**************************************************************************************\n" +
-				"**                             Project Downloader: Jan 2021                         **\n" +
+				"**                             Project Downloader: Feb 2021                         **\n" +
 				"**************************************************************************************\n" +
-				"This tool downloads one or more files from Seven Bridges Projects while maintaining\n"+
-				"their folder structure via the fast, multi-threaded, aria2 download utility.\n"+
+				"This tool downloads files from Seven Bridges Projects while maintainingtheir folder\n"+
+				"structure via the fast, multi-threaded, aria2 download utility.\n"+
 
 				"\nOptions:\n"+
 				"-p Project ID (division/projectName) to download.\n"+
