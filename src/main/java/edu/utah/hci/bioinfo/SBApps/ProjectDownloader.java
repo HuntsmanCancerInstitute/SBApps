@@ -1,7 +1,6 @@
 package edu.utah.hci.bioinfo.SBApps;
 
 import com.mashape.unirest.http.JsonNode;
-import com.mashape.unirest.http.exceptions.UnirestException;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -22,7 +21,6 @@ public class ProjectDownloader {
 	private String projectId = null;
 	private Pattern[] toKeep = null;
 	private boolean skipNoUrlFiles = false;
-	private boolean justPrintFilePaths = false;
 	private File aria2 = null;
 	private File downloadDirectory = null;
 
@@ -47,12 +45,12 @@ public class ProjectDownloader {
 				fetchProjects();
 			}
 
-			//fetch files and folders for the project
+			//fetch files and folders for the project, max return per query is 100 items
 			Util.p("Loading files from "+projectId+"...");
-			JsonNode fj = api.query("files?project="+projectId, true);
+			JsonNode fj = api.query("files?offset=0&limit=100&project="+projectId, true, true);
 			if (fj == null) System.exit(1);
 			loadSBFiles(fj);
-
+			
 			//build the map
 			Util.p("\nBuilding file paths...");
 			buildFilePaths();
@@ -86,22 +84,50 @@ public class ProjectDownloader {
 
 
 
-	private void fetchProjects() throws UnirestException {
-		JsonNode pj = api.query("projects", true);
-		if (pj == null) System.exit(1);
-		Util.p("\tProjectID\tCreatedBy\tCreatedOn");
-		JSONArray proj = pj.getObject().getJSONArray("items");
-		Iterator<Object> it = proj.iterator();
-		while (it.hasNext() ) {
-			JSONObject jo = (JSONObject) it.next();
-			StringBuilder sb = new StringBuilder();
-			sb.append("\t");
-			sb.append(jo.get("id")); sb.append("\t");
-			sb.append(jo.get("created_by")); sb.append("\t");
-			sb.append(jo.get("created_on")); 
-			Util.p(sb);
+	private void fetchProjects() throws Exception {
+		//max num is 100
+
+		ArrayList<JSONArray> projAL = new ArrayList<JSONArray>();
+		int offset=0;
+		while (true) {
+			JsonNode pj = api.query("projects?offset="+offset+"&limit=100", true, true);
+			if (pj == null) System.exit(1);
+			JSONArray proj = pj.getObject().getJSONArray("items");
+			projAL.add(proj);
+
+			//check links
+			JSONArray links = pj.getObject().getJSONArray("links");
+			//Util.p("LINKS:\n"+ links.toString(5));
+			JSONObject linksDetails = (JSONObject) links.get(0);
+			String rel = linksDetails.getString("rel");
+			if (rel == null) {
+				Util.e("Failed to find the rel key in "+links.toString(5));
+				System.exit(1);
+			}
+			
+			//is there more?
+			if (rel.equals("next") == false) break;
+			offset+=100;
 		}
-		System.exit(0);
+
+		//print all projects
+		Util.p("\tProjectID\tProjectName\tCreatedBy\tCreatedOn");
+		int numProj = 0;
+		for (JSONArray proj: projAL) {
+			Iterator<Object> it = proj.iterator();
+			while (it.hasNext() ) {
+				numProj++;
+				JSONObject jo = (JSONObject) it.next();
+				StringBuilder sb = new StringBuilder();
+				sb.append("\t");
+				sb.append(jo.get("id")); sb.append("\t");
+				sb.append(jo.get("name")); sb.append("\t");
+				sb.append(jo.get("created_by")); sb.append("\t");
+				sb.append(jo.get("created_on")); 
+				Util.p(sb);
+			}
+			Util.p("\t\t"+numProj+"\tProjects");
+		}
 	}
 
 
@@ -146,12 +172,12 @@ public class ProjectDownloader {
 
 
 
-	private void requestUrls() throws UnirestException {
+	private void requestUrls() throws Exception {
 		Util.p("\tMade?\tFilePath\tURL");
 		ArrayList<SBFile> fail = new ArrayList<SBFile>();
 		for (SBFile f: pathFileMap.values()) {
 			if (f.isMakeUrl()) {
-				JsonNode pj = api.query("files/"+f.getId()+"/download_info", false);
+				JsonNode pj = api.query("files/"+f.getId()+"/download_info", true, false);
 				if (pj == null) {
 					fail.add(f);
 					Util.p("\tfalse\t"+f.getPath());
@@ -197,15 +223,22 @@ public class ProjectDownloader {
 
 		Util.p("\tDownload?\tFilePath");
 		boolean urlsToFetch = false;
+		int numToDownload = 0;
+		int numToSkip = 0;
 		for (String p: pathFileMap.keySet()) {
 			boolean makeUrl = pathFileMap.get(p).isMakeUrl();
-			if (makeUrl) urlsToFetch = true;
+			if (makeUrl) {
+				urlsToFetch = true;
+				numToDownload++;
+			}
+			else numToSkip++;
 			Util.p("\t"+makeUrl+"\t"+p);
 		}
+		Util.p("\t"+numToDownload+" #ToDownload\t"+numToSkip+" #Skipped");
 		//anything to do?
-		if (urlsToFetch == false) Util.printErrorExit("\nNo passing files to download? Check regular expressions.");
+		if (urlsToFetch == false) Util.printErrorExit("\nNo passing files to download? Check regular expressions!");
 		//exit?
-		if (justPrintFilePaths) System.exit(0);
+		if (downloadDirectory == null) System.exit(0);
 	}
 
 	private void addParentNames(ArrayList<String> paths, SBFile f) {
@@ -216,22 +249,55 @@ public class ProjectDownloader {
 		}
 	}
 
-	private void loadSBFiles(JsonNode fj) throws IOException, UnirestException {
-		JSONArray items = (JSONArray) fj.getObject().get("items");
-		Iterator<Object> it = items.iterator();
-		while (it.hasNext()) {
-			JSONObject ff = (JSONObject) it.next();
-			SBFile sbf = new SBFile (ff);
+	
+	private void loadSBFiles(JsonNode fj) throws Exception {
+		ArrayList<SBFile> items = fetchFileItems(fj);
+		//Util.p("\t# files\t"+items.size());
+		
+		//Iterator<Object> it = items.iterator();
+		//while (it.hasNext()) {
+		for (SBFile sbf: items) {
+			//JSONObject ff = (JSONObject) it.next();
+			//SBFile sbf = new SBFile (ff);
 			if (idFileMap.containsKey(sbf.getId())) Util.printErrorExit("Already saved "+sbf.getId());
 			else {
 				idFileMap.put(sbf.getId(), sbf);
 				//is it a folder?
 				if (sbf.isFolder()) {
-					JsonNode folderQuery = api.query("files?parent="+sbf.getId(), true);
+					JsonNode folderQuery = api.query("files?offset=0&limit=100&parent="+sbf.getId(), true, true);
 					if (folderQuery == null) throw new IOException ("Failed to load folder "+"files?parent="+sbf.getId());
 					loadSBFiles(folderQuery);
 				}
 			}
+		}
+		
+	}
+
+
+
+	private ArrayList<SBFile> fetchFileItems(JsonNode fj) throws Exception {
+		//first request, might contain a link to pull more
+		ArrayList<SBFile> allItems = new ArrayList<SBFile>();
+		JSONObject response = (JSONObject) fj.getObject();
+
+		while (true) {
+			//add the items
+			JSONArray items = (JSONArray) response.get("items");
+			Iterator<Object> it = items.iterator();
+			while (it.hasNext()) allItems.add(new SBFile((JSONObject)it.next()));
+			
+			//anything left?
+			JSONArray links = (JSONArray) response.get("links");
+			
+			if (links.length() == 0) return allItems;
+			JSONObject l = links.getJSONObject(0);
+			String rel = l.getString("rel");
+			if (rel.equals("next")) {
+				String hrefToCall = l.getString("href");
+				JsonNode newNode = api.query(hrefToCall, false, true);
+				response = (JSONObject) newNode.getObject();
+			}
+			else return allItems;
 		}
 	}
 
@@ -262,7 +328,6 @@ public class ProjectDownloader {
 					case 'p': projectId = args[++i]; break;
 					case 'r': regExToKeep = args[++i]; break;
 					case 's': skipNoUrlFiles = true; break;
-					case 'l': justPrintFilePaths = true; break;
 					case 'd': downloadDirectory = new File(args[++i]).getCanonicalFile(); break;
 					case 'e': aria2 = new File(args[++i]).getCanonicalFile(); break;
 					default: Util.printErrorExit("\nProblem, unknown option! " + mat.group()); 
@@ -291,9 +356,11 @@ public class ProjectDownloader {
 		}
 
 		//make download dir
-		if (downloadDirectory == null) downloadDirectory = new File( System.getProperty("user.dir") ).getCanonicalFile();
-		if (downloadDirectory.exists() == false) downloadDirectory.mkdirs();
-		if (downloadDirectory.isDirectory() == false || downloadDirectory.exists() == false) Util.printErrorExit("Failed to find or make your download directory -> "+downloadDirectory);
+		if (downloadDirectory != null) {
+			downloadDirectory.mkdirs();
+			if (downloadDirectory.isDirectory() == false || downloadDirectory.exists() == false) Util.printErrorExit("Failed to find or make your download directory -> "+downloadDirectory);
+		}
+		
 
 	}	
 
@@ -309,13 +376,11 @@ public class ProjectDownloader {
 
 				"\nOptions:\n"+
 				"-p Project ID (division/projectName) to download.\n"+
-				"      Skip this option to list the visible Projects.\n"+
-				"-d Path to a directory for downloading the Project.\n"+
-				"      Defaults to the current working directory.\n"+
-				"-l List the Project file paths and exit.\n"+
-				"      Recommended, then use -r to select files to download.\n"+
+				"      Skip this option to just list the visible Projects.\n"+
 				"-r Regular expressions to select particular Project file paths to download.\n"+
 				"      Comma delimited, no spaces, enclose in 'xxx', defaults to all.\n"+
+				"-d Download Project files into this directory.\n"+
+				"      Skip this option to just list the files.\n"+
 				"-c Path to your SB unified credentials file.\n"+
 				"      Defaults to ~/.sevenbridges/credentials\n"+
 				"      If it does not exist, fetch an authentication token https://tinyurl.com/sbtoken\n"+
@@ -331,9 +396,9 @@ public class ProjectDownloader {
 				"List visible Projects:\n"+
 				"     java -Xmx1G -jar pathTo/ProjectDownloader_xxx.jar\n"+
 				"List files in a Project:\n"+
-				"     java -Xmx1G -jar pathTo/ProjectDownloader_xxx.jar -p alana-welm/pdx -l\n"+
+				"     java -Xmx1G -jar pathTo/ProjectDownloader_xxx.jar -p alana-welm/pdx\n"+
 				"Test Project file path regexes:\n"+
-				"     java -Xmx1G -jar pathTo/ProjectDownloader_xxx.jar -p alana-welm/pdx -l \n"+
+				"     java -Xmx1G -jar pathTo/ProjectDownloader_xxx.jar -p alana-welm/pdx\n"+
 				"     -r '.+bam,.+cram,.+bai,.+crai'\n"+
 				"Download available alignment files:\n"+
 				"     java -Xmx1G -jar pathTo/ProjectDownloader_xxx.jar -p alana-welm/pdx -d ~/PdxProj\n"+

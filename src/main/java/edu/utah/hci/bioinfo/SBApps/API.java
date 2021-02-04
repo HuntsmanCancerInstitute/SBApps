@@ -6,7 +6,6 @@ import org.json.JSONObject;
 import com.mashape.unirest.http.HttpResponse;
 import com.mashape.unirest.http.JsonNode;
 import com.mashape.unirest.http.Unirest;
-import com.mashape.unirest.http.exceptions.UnirestException;
 
 public class API {
 
@@ -19,17 +18,40 @@ public class API {
 		userToken = c.getToken();
 	}
 
-	public JsonNode query(String query, boolean verbose) throws UnirestException {
-		HttpResponse <JsonNode> response = Unirest.get(sbUrl+query).header("X-SBG-Auth-Token", userToken).asJson();
-		if (response.getStatus() == 200) return response.getBody();
+	public JsonNode query(String query, boolean partialURL, boolean verbose) throws Exception {
+		String url = query;
+		if (partialURL) url = sbUrl+query;
+		HttpResponse <JsonNode> response = Unirest.get(url).header("X-SBG-Auth-Token", userToken).asJson();
+		
+		//standard response/
+		if (response.getStatus() == 200) {
+//Util.p(response.getBody().getObject().toString(5));
+			return response.getBody();
+		}
+		
+		//hit rate limit? too many API calls
+		else if (response.getStatus() == 429) {
+			if (verbose) {
+				Util.e("\nProblem executing API query: "+url);
+				Util.e("Body: "+ response.getBody());
+				System.err.print("Waiting 5 min before making further calls" );
+				for (int x=0; x<31; x++) {
+					Thread.sleep(10000);
+					System.err.print(".");
+				}
+				Util.e("");
+				return query(query, partialURL, verbose);
+			}
+		}
 		else {
 			if (verbose) {
-				Util.e("\nProblem executing API query: "+sbUrl+query);
+				Util.e("\nProblem executing API query: "+url);
 				Util.e("Status: "+response.getStatus());
 				Util.e("Body: "+ response.getBody());
 			}
 			return null;
 		} 
+		return null;
 	}
 
 	public JsonNode bulkFileDetailQuery(ArrayList<String> fileIds) {
