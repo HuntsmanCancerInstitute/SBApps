@@ -37,12 +37,29 @@ public class Util {
 	}
 	public static void printErrorExit(Object o) {
 		System.err.println(o.toString());
+		System.err.flush();
+		System.out.flush();
 		System.exit(1);
 	}
 
 	public static void printTabbedJson(JsonNode json) {
 		Util.p(json.getObject().toString(5));
 		
+	}
+	
+	/**Attempts to delete a directory and it's contents.
+	 * Returns false if all the file cannot be deleted or the directory is null.
+	 * Files contained within scheduled for deletion upon close will cause the return to be false.*/
+	public static void deleteDirectory(File dir){
+		if (dir == null || dir.exists() == false) return;
+		if (dir.isDirectory()) {
+			File[] children = dir.listFiles();
+			for (int i=0; i<children.length; i++) {
+				deleteDirectory(children[i]);
+			}
+			dir.delete();
+		}
+		dir.delete();
 	}
 	
 	/**Uses ProcessBuilder to execute a cmd, combines standard error and standard out into one and returns their output.*/
@@ -79,6 +96,7 @@ public class Util {
 		BufferedReader in;
 		String name = txtFile.getName().toLowerCase();
 		if (name.endsWith(".zip")) {
+			@SuppressWarnings("resource")
 			ZipFile zf = new ZipFile(txtFile);
 			ZipEntry ze = (ZipEntry) zf.entries().nextElement();
 			in = new BufferedReader(new InputStreamReader(zf.getInputStream(ze)));
@@ -97,5 +115,7 @@ public class Util {
 			} catch (IOException e) {}
 		}
 	}
+	
+
 	
 }

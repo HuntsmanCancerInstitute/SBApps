@@ -8,7 +8,7 @@
 	<groupId>edu.utah.hci.bioinfo</groupId>
 	<artifactId>SBApps</artifactId>
 	<packaging>jar</packaging>
-	<version>1.0</version>
+	<version>0.2.1</version>
 
 	<name>SBApps</name>
 	<url>https://github.com/HuntsmanCancerInstitute</url>

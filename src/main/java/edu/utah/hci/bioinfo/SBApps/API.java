@@ -24,10 +24,7 @@ public class API {
 		HttpResponse <JsonNode> response = Unirest.get(url).header("X-SBG-Auth-Token", userToken).asJson();
 		
 		//standard response/
-		if (response.getStatus() == 200) {
-//Util.p(response.getBody().getObject().toString(5));
-			return response.getBody();
-		}
+		if (response.getStatus() == 200) return response.getBody();
 		
 		//hit rate limit? too many API calls
 		else if (response.getStatus() == 429) {
@@ -54,6 +51,7 @@ public class API {
 		return null;
 	}
 
+	/*
 	public JsonNode bulkFileDetailQuery(ArrayList<String> fileIds) {
 		JSONArray ja = new JSONArray();
 		try {
@@ -82,17 +80,6 @@ public class API {
 			Util.printErrorExit("Problem executing API bulk file query "+sbUrl+"bulk/files/get"+ja.toString());
 			return null;
 		}
-
-
-	}
-
-	/*
-	 * HttpResponse<JsonNode> jsonResponse 
-      = Unirest.post("http://www.mocky.io/v2/5a9ce7663100006800ab515d")
-      .body("{\"name\":\"Sam Baeldung\", \"city\":\"viena\"}")
-      .asJson();
-	 */
-
-
+	}*/
 
 }

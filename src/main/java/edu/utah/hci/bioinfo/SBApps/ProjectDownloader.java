@@ -35,45 +35,17 @@ public class ProjectDownloader {
 			long startTime = System.currentTimeMillis();
 
 			processArgs(args);
-
-			//create an API helper
-			api = new API (credentials);
 			
-			//pull projects?
-			if (projectId == null) {
-				Util.p("No project ID provided, loading visable projects...");
-				fetchProjects();
-			}
-
-			//fetch files and folders for the project, max return per query is 100 items
-			Util.p("Loading files from "+projectId+"...");
-			JsonNode fj = api.query("files?offset=0&limit=100&project="+projectId, true, true);
-			if (fj == null) System.exit(1);
-			loadSBFiles(fj);
-			
-			//build the map
-			Util.p("\nBuilding file paths...");
-			buildFilePaths();
-			
-			//pull bulk details for archived files?  doesn't have it!
-			/*
-			ArrayList<String> al = new ArrayList<String>();
-			al.add("6006fa6ee4b0bc6ab1b0309c");
-			Util.p(api.bulkFileDetailQuery(al).getObject().toString(5));
-			System.exit(0);
-			*/
-
-			//get file urls, some of these calls will fail if the file is archived or being archived/ unarchived
-			Util.p("\nRequesting URLs...");
-			requestUrls();
-
-			//make aria2 download file
-			Util.p("\nWriting aria2 bulk download file...");
-			downloadFiles();
+			int exitStatus = doWork();
 
 			//finish and calc run time
 			double diffTime = ((double)(System.currentTimeMillis() -startTime))/60000;
-			System.out.println("\nDone! "+Math.round(diffTime)+" Min\n");
+			
+			if (exitStatus == 0) System.out.println("Done! "+Math.round(diffTime)+" Min\n");
+			else {
+				System.err.println("\nERROR! "+Math.round(diffTime)+" Min\n");
+				System.exit(1);
+			}
 
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -84,14 +56,51 @@ public class ProjectDownloader {
 
 
 
-	private void fetchProjects() throws Exception {
+	private int doWork() throws Exception {
+
+		//create an API helper
+		api = new API (credentials);
+		
+		//pull projects?
+		if (projectId == null) {
+			Util.p("No project ID provided, loading visable projects...");
+			if (fetchProjects()) return 0;
+			return 1;
+		}
+
+		//fetch files and folders for the project, max return per query is 100 items
+		Util.p("Loading files from "+projectId+"...");
+		JsonNode fj = api.query("files?offset=0&limit=100&project="+projectId, true, true);
+		if (fj == null) return 1;
+		loadSBFiles(fj);
+		
+		//build the map
+		Util.p("\nBuilding file paths...");
+		buildFilePaths();
+		if (downloadDirectory == null) return 0;
+
+		//get file urls, some of these calls will fail if the file is archived or being archived/ unarchived
+		Util.p("\nRequesting URLs...");
+		if (requestUrls() == false) return 1;
+
+		//make aria2 download file
+		Util.p("\nWriting aria2 bulk download file...");
+		if (downloadFiles() == false) return 1;
+
+		return 0; //ok
+		
+	}
+
+
+
+	private boolean fetchProjects() throws Exception {
 		//max num is 100
 
 		ArrayList<JSONArray> projAL = new ArrayList<JSONArray>();
 		int offset=0;
 		while (true) {
 			JsonNode pj = api.query("projects?offset="+offset+"&limit=100", true, true);
-			if (pj == null) System.exit(1);
+			if (pj == null) return false;
 			JSONArray proj = pj.getObject().getJSONArray("items");
 			projAL.add(proj);
 
@@ -103,7 +112,7 @@ public class ProjectDownloader {
 			String rel = linksDetails.getString("rel");
 			if (rel == null) {
 				Util.e("Failed to find the rel key in "+links.toString(5));
-				System.exit(1);
+				return false;
 			}
 			
 			//is there more?
@@ -129,12 +138,12 @@ public class ProjectDownloader {
 			}
 			Util.p("\t\t"+numProj+"\tProjects");
 		}
-		System.exit(0);
+		return true;
 	}
 
 
 
-	private void downloadFiles() throws IOException {
+	private boolean downloadFiles() throws IOException {
 		///Users/u0028003/BioApps/Aria2/aria2-1.35.0/bin/aria2c --show-console-readout=false --max-connection-per-server=10 --min-split-size=1M -c -i test.txt --dir /Users/u0028003/Downloads/Delme
 
 		//write out file list for aria2
@@ -157,24 +166,27 @@ public class ProjectDownloader {
 				"-i", downloadSet.getCanonicalPath()
 		};
 
-		//no aria2, just exit
+		//no aria2, just print cmd they should execute.
 		if (aria2 == null) {
 			Util.p("\tExecute -> "+Util.stringArrayToString(cmd, " "));
-			System.exit(0);
+			return true;
 		}
 
-		Util.p("\tExecuting -> "+Util.stringArrayToString(cmd, " "));
-		String[] output = Util.executeViaProcessBuilder(cmd, true, "\t");
-
-		//OK?
-		if (output[output.length-1].contains("(OK)") == false) {
-			Util.printErrorExit("\t\nDownload Error from Aria2!  It may be an AWS issue.  Try executing the cmd line above in a few hours.  Downloads will pick up where they left off.");
+		else {
+			Util.p("\tExecuting -> "+Util.stringArrayToString(cmd, " "));
+			String[] output = Util.executeViaProcessBuilder(cmd, true, "\t");
+			//OK?
+			if (output[output.length-1].contains("(OK)") == false) {
+				Util.e("\t\nDownload Error from Aria2!  It may be an AWS issue.  Try executing the cmd line above in a few hours.  Downloads will pick up where they left off.");
+				return false;
+			}
+			return true;
 		}
 	}
 
 
 
-	private void requestUrls() throws Exception {
+	private boolean requestUrls() throws Exception {
 		Util.p("\tMade?\tFilePath\tURL");
 		ArrayList<SBFile> fail = new ArrayList<SBFile>();
 		for (SBFile f: pathFileMap.values()) {
@@ -192,9 +204,16 @@ public class ProjectDownloader {
 
 			}
 		}
-		if (fail.size() !=0 && skipNoUrlFiles == false) Util.printErrorExit("\n\t"+fail.size()+"\tURL(s) could not be made, check the files above in the SB web console (archived?) or set the -s flag to skip them.");
+		if (fail.size() !=0 && skipNoUrlFiles == false) {
+			Util.e("\n\t"+fail.size()+"\tURL(s) could not be made, check the files above in the SB web console (archived?) or set the -s flag to skip them.");
+			return false;
+		}
 
-		if (filesToDownload.size() == 0) Util.printErrorExit("\n\tNo files to download?\n");
+		if (filesToDownload.size() == 0) {
+			Util.e("\n\tNo files to download?\n");
+			return false;
+		}
+		return true;
 	}
 
 
@@ -236,11 +255,9 @@ public class ProjectDownloader {
 			else numToSkip++;
 			Util.p("\t"+makeUrl+"\t"+p);
 		}
-		Util.p("\t"+numToDownload+" #ToDownload\t"+numToSkip+" #Skipped");
+		Util.p("\t"+numToDownload+" #ToDownload\t"+numToSkip+" #Skipped\n");
 		//anything to do?
 		if (urlsToFetch == false) Util.printErrorExit("\nNo passing files to download? Check regular expressions!");
-		//exit?
-		if (downloadDirectory == null) System.exit(0);
 	}
 
 	private void addParentNames(ArrayList<String> paths, SBFile f) {
@@ -254,13 +271,7 @@ public class ProjectDownloader {
 	
 	private void loadSBFiles(JsonNode fj) throws Exception {
 		ArrayList<SBFile> items = fetchFileItems(fj);
-		//Util.p("\t# files\t"+items.size());
-		
-		//Iterator<Object> it = items.iterator();
-		//while (it.hasNext()) {
 		for (SBFile sbf: items) {
-			//JSONObject ff = (JSONObject) it.next();
-			//SBFile sbf = new SBFile (ff);
 			if (idFileMap.containsKey(sbf.getId())) Util.printErrorExit("Already saved "+sbf.getId());
 			else {
 				idFileMap.put(sbf.getId(), sbf);
@@ -272,7 +283,6 @@ public class ProjectDownloader {
 				}
 			}
 		}
-		
 	}
 
 
@@ -311,7 +321,7 @@ public class ProjectDownloader {
 
 	/**This method will process each argument and assign new varibles
 	 * @throws IOException */
-	public void processArgs(String[] args) throws IOException{
+	public void processArgs(String[] args) throws Exception{
 		Util.p("\nArgs: SBApps/ProjectDownloader: "+ Util.stringArrayToString(args, " ")+"\n");
 		Pattern pat = Pattern.compile("-[a-z]");
 		String regExToKeep = null;
@@ -343,6 +353,7 @@ public class ProjectDownloader {
 
 		//find credentials file and parse
 		credentials = new Credentials(credentialsFile, account);
+		if (credentials.isOk() == false) System.exit(1);
 
 		//process regexes
 		if (regExToKeep != null) {
@@ -373,7 +384,7 @@ public class ProjectDownloader {
 				"**************************************************************************************\n" +
 				"**                             Project Downloader: Feb 2021                         **\n" +
 				"**************************************************************************************\n" +
-				"This tool downloads files from Seven Bridges Projects while maintainingtheir folder\n"+
+				"This tool downloads files from Seven Bridges Projects while maintaining their folder\n"+
 				"structure via the fast, multi-threaded, aria2 download utility.\n"+
 
 				"\nOptions:\n"+
@@ -388,11 +399,12 @@ public class ProjectDownloader {
 				"      If it does not exist, fetch an authentication token https://tinyurl.com/sbtoken\n"+
 				"      Then use a text editor to create the ~/.sevenbridges/credentials file following\n"+
 				"      the format in https://tinyurl.com/sbcred, chmod 600 the file, and keep it safe.\n"+
-				"-a Account credentials to load, defaults to [default].\n"+
+				"-a Account credentials to load, defaults to 'default'.\n"+
 				"-s Skip files that failed URL creation instead of exiting. These are typically \n"+
 				"     archived in Glacier. Use the SB web console to unarchive them, then rerun.\n"+
 				"-e Path to the aria2 executable, see https://aria2.github.io to download and install.\n"+
 				"     Skip this option to set up a mock aria2 download.\n"+
+				"-h Print this help menu.\n"+
 
 				"\nExamples assuming ~/.sevenbridges/credentials exists: \n\n"+
 				"List visible Projects:\n"+
