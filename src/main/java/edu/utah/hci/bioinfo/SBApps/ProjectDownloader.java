@@ -191,7 +191,7 @@ public class ProjectDownloader {
 		ArrayList<SBFile> fail = new ArrayList<SBFile>();
 		for (SBFile f: pathFileMap.values()) {
 			if (f.isMakeUrl()) {
-				JsonNode pj = api.query("files/"+f.getId()+"/download_info", true, false);
+				JsonNode pj = api.query("files/"+f.getId()+"/download_info", true, true);
 				if (pj == null) {
 					fail.add(f);
 					Util.p("\tfalse\t"+f.getPath());
@@ -382,7 +382,7 @@ public class ProjectDownloader {
 	public static void printDocs(){
 		Util.p(
 				"**************************************************************************************\n" +
-				"**                             Project Downloader: Feb 2021                         **\n" +
+				"**                            Project Downloader: April 2021                        **\n" +
 				"**************************************************************************************\n" +
 				"This tool downloads files from Seven Bridges Projects while maintaining their folder\n"+
 				"structure via the fast, multi-threaded, aria2 download utility.\n"+
