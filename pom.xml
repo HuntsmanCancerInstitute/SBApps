@@ -6,11 +6,11 @@
 	<modelVersion>4.0.0</modelVersion>
 
 	<groupId>edu.utah.hci.bioinfo</groupId>
-	<artifactId>SBApps</artifactId>
+	<artifactId>ProjectDownloader</artifactId>
 	<packaging>jar</packaging>
-	<version>0.2.1</version>
+	<version>0.3</version>
 
-	<name>SBApps</name>
+	<name>ProjectDownloader</name>
 	<url>https://github.com/HuntsmanCancerInstitute</url>
 
 	<properties>
@@ -51,7 +51,7 @@
 							<transformers>
 								<transformer
 									implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-									<mainClass>edu.utah.hci.bioinfo.SBApps.App</mainClass>
+									<mainClass>edu.utah.hci.bioinfo.SBApps.ProjectDownloader</mainClass>
 								</transformer>
 							</transformers>
 						</configuration>

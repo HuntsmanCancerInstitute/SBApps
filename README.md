@@ -3,17 +3,16 @@ Tools for working with the Seven Bridges bioinformatics platform.
 
 ## ProjectDownloader
 <pre>
- u0028003$ java -jar ~/Code/SBApps/target/ProjectDownloader_0.2.jar -h
-
-Args: SBApps/ProjectDownloader: -h
-
+u0028003$ java -jar ~/Code/SBApps/target/ProjectDownloader-0.3.jar 
 **************************************************************************************
-**                             Project Downloader: Feb 2021                         **
+**                            Project Downloader: April 2021                        **
 **************************************************************************************
 This tool downloads files from Seven Bridges Projects while maintaining their folder
-structure via the fast, multi-threaded, aria2 download utility.
+structure via the fast, multi-threaded, aria2 download utility. Files already
+downloaded are skipped so run iteratively as new files become available.
 
 Options:
+-l List visible Projects.
 -p Project ID (division/projectName) to download.
       Skip this option to just list the visible Projects.
 -r Regular expressions to select particular Project file paths to download.
@@ -34,8 +33,8 @@ Options:
 Examples assuming ~/.sevenbridges/credentials exists: 
 
 List visible Projects:
-     java -Xmx1G -jar pathTo/ProjectDownloader_xxx.jar
-List files in a Project:
+     java -Xmx1G -jar pathTo/ProjectDownloader_xxx.jar -l
+List files in a particular Project:
      java -Xmx1G -jar pathTo/ProjectDownloader_xxx.jar -p alana-welm/pdx
 Test Project file path regexes:
      java -Xmx1G -jar pathTo/ProjectDownloader_xxx.jar -p alana-welm/pdx

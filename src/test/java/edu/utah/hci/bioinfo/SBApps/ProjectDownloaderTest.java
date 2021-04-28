@@ -48,7 +48,7 @@ public class ProjectDownloaderTest {
     public void testListProjectsDefault() {
     	
        	String[] command = new String[] {
-    			"java", "-jar", testJar.toString()
+    			"java", "-jar", testJar.toString(), "-l"
        	};
        	String[] output = Util.executeViaProcessBuilder(command, true, "\n");
     	Assert.assertTrue(Util.stringArrayToString(output, " ").contains(projectID));

@@ -21,6 +21,7 @@ public class ProjectDownloader {
 	private String projectId = null;
 	private Pattern[] toKeep = null;
 	private boolean skipNoUrlFiles = false;
+	private boolean skipDownloadedFiles = true;
 	private File aria2 = null;
 	private File downloadDirectory = null;
 
@@ -63,24 +64,24 @@ public class ProjectDownloader {
 		
 		//pull projects?
 		if (projectId == null) {
-			Util.p("No project ID provided, loading visable projects...");
+			Util.p("Listing visable Projects...");
 			if (fetchProjects()) return 0;
 			return 1;
 		}
 
-		//fetch files and folders for the project, max return per query is 100 items
+		//fetch files and folders for the project, max return per query is 100 items, unfortunately we have to fetch all of the files in a project, no option to fetch just a subset, some projects have 40K+ files!
 		Util.p("Loading files from "+projectId+"...");
 		JsonNode fj = api.query("files?offset=0&limit=100&project="+projectId, true, true);
 		if (fj == null) return 1;
 		loadSBFiles(fj);
 		
 		//build the map
-		Util.p("\nBuilding file paths...");
+		Util.p("\nBuilding file paths, comparing to what already exists...");
 		buildFilePaths();
 		if (downloadDirectory == null) return 0;
 
-		//get file urls, some of these calls will fail if the file is archived or being archived/ unarchived
-		Util.p("\nRequesting URLs...");
+		//get file urls, some of these calls will fail if the file is archived or being archived/ unarchived or has hit some odd issue with no error! 
+		Util.p("\nRequesting download URLs...");
 		if (requestUrls() == false) return 1;
 
 		//make aria2 download file
@@ -231,9 +232,16 @@ public class ProjectDownloader {
 				else {
 					String p = f.getPath();
 					f.setMakeUrl(false);
+
 					for (Pattern pat: toKeep) {
 						if (pat.matcher(p).matches()) {
-							f.setMakeUrl(true);
+							//check if it exists?
+							if (skipDownloadedFiles) {
+								File test = new File (downloadDirectory, p);
+								if (test.exists()) f.setMakeUrl(false);
+								else f.setMakeUrl(true);
+							}
+							else f.setMakeUrl(true);
 							break;
 						}
 					}
@@ -316,7 +324,8 @@ public class ProjectDownloader {
 
 
 	public static void main(String[] args) {
-		new ProjectDownloader(args);
+		if (args.length == 0) printDocs();
+		else new ProjectDownloader(args);
 	}		
 
 	/**This method will process each argument and assign new varibles
@@ -338,6 +347,7 @@ public class ProjectDownloader {
 					case 'c': credentialsFile = new File(args[++i]).getCanonicalFile(); break;
 					case 'a': account = args[++i]; break;
 					case 'p': projectId = args[++i]; break;
+					case 'l': break;
 					case 'r': regExToKeep = args[++i]; break;
 					case 's': skipNoUrlFiles = true; break;
 					case 'd': downloadDirectory = new File(args[++i]).getCanonicalFile(); break;
@@ -385,9 +395,11 @@ public class ProjectDownloader {
 				"**                            Project Downloader: April 2021                        **\n" +
 				"**************************************************************************************\n" +
 				"This tool downloads files from Seven Bridges Projects while maintaining their folder\n"+
-				"structure via the fast, multi-threaded, aria2 download utility.\n"+
+				"structure via the fast, multi-threaded, aria2 download utility. Files already\n"+
+				"downloaded are skipped so run iteratively as new files become available.\n"+
 
 				"\nOptions:\n"+
+				"-l List visible Projects.\n"+
 				"-p Project ID (division/projectName) to download.\n"+
 				"      Skip this option to just list the visible Projects.\n"+
 				"-r Regular expressions to select particular Project file paths to download.\n"+
@@ -404,12 +416,11 @@ public class ProjectDownloader {
 				"     archived in Glacier. Use the SB web console to unarchive them, then rerun.\n"+
 				"-e Path to the aria2 executable, see https://aria2.github.io to download and install.\n"+
 				"     Skip this option to set up a mock aria2 download.\n"+
-				"-h Print this help menu.\n"+
 
 				"\nExamples assuming ~/.sevenbridges/credentials exists: \n\n"+
 				"List visible Projects:\n"+
-				"     java -Xmx1G -jar pathTo/ProjectDownloader_xxx.jar\n"+
-				"List files in a Project:\n"+
+				"     java -Xmx1G -jar pathTo/ProjectDownloader_xxx.jar -l\n"+
+				"List files in a particular Project:\n"+
 				"     java -Xmx1G -jar pathTo/ProjectDownloader_xxx.jar -p alana-welm/pdx\n"+
 				"Test Project file path regexes:\n"+
 				"     java -Xmx1G -jar pathTo/ProjectDownloader_xxx.jar -p alana-welm/pdx\n"+
